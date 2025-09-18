@@ -26,7 +26,7 @@
             reloadButton: ".mdi-reload",
             threeDotsMenu: ".ax-page-toolbar .mdi-dots-vertical",
             menuItem: '[role="menuitem"]',
-            openInNewWic: ".mdi-open-in-new",
+            openInNewWic: ".v-navigation-drawer--open.v-navigation-drawer--right .mdi-open-in-new",
             errorDialogButton: 'button[data-ax-id="message-dialog-action-button"]',
             cursorLoading: ".ax-cursor-toolbar .v-btn--loading",
             progressBar: '[role="progressbar"]'
