@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Mis Atajos para Deister (Versión Clásica)
+// @name         Mis Atajos para Deister (Versión Mejorada)
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0
-// @description  Agrega atajos de teclado para acelerar tareas en Deister.
+// @version      3.0.0
+// @description  Agrega atajos de teclado para acelerar tareas en Deister, con lógica asíncrona mejorada.
 // @author       Ale.P.
 // @match        *://*/os/jobstool*
 // @match        *://*/os/dbstudio*
@@ -12,22 +12,78 @@
 // @match        *192.168.100.52:8085/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=deistercloud.com
 // @grant        none
+// @update       2025-09-18
 // ==/UserScript==
-// @update      2025-09-17
-// CreatedBy: Ale.P.
 
 (function() {
     'use strict';
 
-    /* Inicia el job activo. */
+    //Mostrar mensaje flotante
+    function showNotification(message, duration = 3000) {
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        Object.assign(notification.style, {
+            position: 'fixed',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            zIndex: '10001',
+            opacity: '0',
+            transition: 'opacity 0.4s ease, bottom 0.4s ease',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+        });
+        document.body.appendChild(notification);
+        setTimeout(() => {
+            notification.style.opacity = '1';
+            notification.style.bottom = '30px';
+        }, 10);
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.bottom = '20px';
+            setTimeout(() => notification.remove(), 400);
+        }, duration);
+    }
+
+    /**
+     * Espera a que un elemento aparezca en el DOM.
+     * @param {string} selector - El selector CSS del elemento.
+     * @param {number} [timeout=8000] - Tiempo máximo de espera en ms.
+     * @returns {Promise<Element>} - Promesa que resuelve con el elemento encontrado.
+     */
+    function waitForElement(selector, timeout = 8000) {
+        return new Promise((resolve, reject) => {
+            const intervalTime = 100;
+            let elapsedTime = 0;
+            const interval = setInterval(() => {
+                const element = document.querySelector(selector);
+                if (element) {
+                    clearInterval(interval);
+                    resolve(element);
+                } else {
+                    elapsedTime += intervalTime;
+                    if (elapsedTime >= timeout) {
+                        clearInterval(interval);
+                        reject(new Error(`Elemento no encontrado tras ${timeout/1000}s: ${selector}`));
+                    }
+                }
+            }, intervalTime);
+        });
+    }
+
+    /** Inicia el job activo. */
     function iniciarJob() {
-        let btnRun = document.querySelector(".v-window-item--active>.dbstudio-flex-header-body .v-toolbar__items>.v-btn--icon");
-        if(btnRun && !btnRun.disabled) {
+        const btnRun = document.querySelector(".v-window-item--active .dbstudio-flex-header-body .v-toolbar__items > .v-btn--icon");
+        if (btnRun && !btnRun.disabled) {
             btnRun.click();
+            showNotification("Job iniciado.");
         }
     }
 
-    /* Limpia la caché, ya sea por Jobstool o por API. */
+    /** Limpia la caché, ya sea por Jobstool o por API. */
     async function limpiarCache() {
         const iconos = document.body.querySelectorAll('.cache-delete-icon');
         console.log(`Encontrados ${iconos.length} elementos de caché.`);
@@ -39,7 +95,7 @@
         }
     }
 
-    /* Realiza las llamadas a la API para borrar cachés. */
+    /** Realiza las llamadas a la API para borrar cachés en paralelo. */
     async function limpiarCacheConAPI() {
         console.log("Limpiando caché por API...");
         const endpoints = [
@@ -53,150 +109,136 @@
             '/os/jobstool/jobs/report/all',
             '/os/jobstool/cachedcursors/all'
         ];
-        // Guardamos todo en una Promise para ejecutar en paralelo
-        await Promise.all(endpoints.map(async (url) => {
-            try {
-                const response = await fetch(window.location.origin + url, { method: 'DELETE' });
-                console.log(`DELETE ${url} - Status: ${response.status}`);
-            } catch (error) {
-                console.error(`Error en DELETE ${url}:`, error);
-            }
-        }));
-        // Recargando el cursor.
-        // try {
-        //     const deletePageUrl = window.location.href + '/delete';
-        //     const response = await fetch(deletePageUrl, { method: 'DELETE' });
-        //     console.log(`DELETE ${deletePageUrl} - Status: ${response.status}`);
-        // } catch (error) {
-        //     console.error(`Error en DELETE ${window.location.href + '/delete'}:`, error);
-        // }
+
+        const promises = endpoints.map(url =>
+            fetch(window.location.origin + url, { method: 'DELETE' })
+            .then(response => console.log(`DELETE ${url} - Status: ${response.status}`))
+            .catch(error => console.error(`Error en DELETE ${url}:`, error))
+        );
+        await Promise.all(promises);
+        console.log("Limpieza por API completada.");
     }
 
-    /* Despliega el árbol de caché de forma recursiva. */
-    function desplegarArbolCache() {
+    /** Despliega el árbol de caché de forma iterativa. */
+    async function desplegarArbolCache() {
+        showNotification("Desplegando árbol de caché...");
+        const delay = (ms) => new Promise(res => setTimeout(res, ms));
         let nodosCerrados = document.querySelectorAll('.v-treeview-node__toggle:not(.v-treeview-node__toggle--open)');
-        if (nodosCerrados.length > 0) {
+
+        while (nodosCerrados.length > 0) {
             nodosCerrados.forEach(nodo => nodo.click());
-            setTimeout(desplegarArbolCache, 150);
+            await delay(200); // Pausa para que el DOM se actualice
+            nodosCerrados = document.querySelectorAll('.v-treeview-node__toggle:not(.v-treeview-node__toggle--open)');
         }
+        showNotification("Árbol de caché desplegado.");
     }
 
-    /* Simula un clic en el botón de recargar. */
+    /** Simula un clic en el botón de recargar. */
     function recargarPagina() {
         document.querySelector('.mdi-reload')?.click();
     }
 
-    /* Abre una nueva pestaña con una URL específica. */
+    /** Abre una nueva pestaña con una URL específica. */
     function abrirEnNuevaPestana(path) {
         window.open(window.location.origin + path, '_blank');
     }
 
-    /* Cambia entre table, vtable o report y abre en nueva pestaña. */
+    /** Cambia entre table, vtable o report y abre en nueva pestaña. */
     function navegarAWic(tipo) {
         const urlActual = window.location.href;
-        // La regex busca la parte a reemplazar en la URL
         const regex = /table\/wic_obj_(table|vtable|report)/;
         if (regex.test(urlActual)) {
             const nuevaUrl = urlActual.replace(regex, `table/wic_obj_${tipo}`);
-            if(nuevaUrl != urlActual){
+            if (nuevaUrl !== urlActual) {
                 window.open(nuevaUrl, '_blank');
             }
         }
     }
-    /** Flujo para abrir un WIC desde el menú de info, con la lógica original de timeouts. */
+
+    /** Abrir un WIC desde el menú de info. */
     async function abrirWicDesdeInfo() {
-        // 1. Clic en el menú de tres puntos
-        const arrThreeDots = document.querySelectorAll('.ax-page-toolbar .mdi-dots-vertical');
-        if (arrThreeDots.length === 0) {
-            console.error("No se encontró el botón de menú (tres puntos).");
-            return;
-        }
-        arrThreeDots[arrThreeDots.length - 1].click();
-
-        // Función auxiliar para esperar a que un elemento aparezca
-        function esperarElemento(selector, timeout = 5000) {
-            return new Promise((resolve, reject) => {
-                const startTime = Date.now();
-                const interval = setInterval(() => {
-                    const elemento = document.querySelector(selector);
-                    if (elemento) {
-                        clearInterval(interval);
-                        resolve(elemento);
-                    } else if (Date.now() - startTime > timeout) {
-                        clearInterval(interval);
-                        // Antes de rechazar, comprobamos si salió el diálogo de error
-                        const btnExpirado = document.querySelector('button[data-ax-id="message-dialog-action-button"]');
-                        if (btnExpirado) {
-                            console.log("Diálogo de 'Cursor expirado' detectado.");
-                            btnExpirado.click();
-                            reject(new Error('Cursor expirado.')); // Rechazamos para detener el flujo
-                        } else {
-                            reject(new Error(`El elemento '${selector}' no apareció en ${timeout}ms.`));
-                        }
-                    }
-                }, 200); // Revisa cada 200ms
-            });
-        }
-
         try {
-            // 2. Espera a que aparezca el menú y busca el elemento "Info"
-            const menuItems = await esperarElemento('[role="menuitem"]');
-            const itemInfo = Array.from(document.querySelectorAll('[role="menuitem"]'))
-            .find(item => item.innerText.toLowerCase().includes('info'));
+            const allThreeDots = document.querySelectorAll('.ax-page-toolbar .mdi-dots-vertical');
+            if (!allThreeDots.length) throw new Error("Botón de menú (tres puntos) no encontrado.");
+            allThreeDots[allThreeDots.length - 1].click();
 
-            if (!itemInfo) {
-                console.error("No se encontró la opción 'Info' en el menú.");
-                return;
+            await waitForElement('[role="menuitem"]', 2000);
+            const menuItem = Array.from(document.querySelectorAll('[role="menuitem"]'))
+                                  .find(item => item.innerText.toLowerCase().includes('info'));
+            if (!menuItem) throw new Error("Opción 'Info' no encontrada en el menú.");
+            menuItem.click();
+
+            const resultado = await Promise.race([
+                waitForElement('.mdi-open-in-new').then(el => ({ type: 'wic', element: el })),
+                waitForElement('button[data-ax-id="message-dialog-action-button"]').then(el => ({ type: 'error', element: el }))
+            ]);
+
+            if (resultado.type === 'error') {
+                showNotification("Cursor expirado. Cerrando diálogo.");
+                resultado.element.click();
+            } else if (resultado.type === 'wic') {
+                showNotification("Abriendo WIC en nueva pestaña...");
+                resultado.element.click();
             }
-            itemInfo.click();
-
-            // 3. Espera a que aparezca el botón de "abrir en nueva pestaña" y haz clic
-            const btnOpenWic = await esperarElemento('.mdi-open-in-new');
-            console.log("Abriendo el WIC en nueva pestaña...");
-            btnOpenWic.click();
-
         } catch (error) {
-            console.warn(error.message);
+            console.error("Flujo 'abrirWicDesdeInfo' falló:", error);
+            showNotification(`Error: ${error.message}`, 5000);
         }
     }
 
+    //Eventos
     document.addEventListener("keydown", async function(event) {
-        // Ignoramos cualquier atajo si el input de un diálogo está activo
-        //if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.isContentEditable)) {
+        //const activeEl = document.activeElement;
+        //if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
         //    return;
         //}
+
         const key = event.key.toLowerCase();
+
         if (event.ctrlKey && event.shiftKey) {
+            event.preventDefault();
             iniciarJob();
         }
         if (event.ctrlKey && key === 'enter') {
+            event.preventDefault();
             await limpiarCache();
-            alert('La caché se ha borrado con éxito.')
+            showNotification('La caché se ha borrado con éxito.');
         }
-        if (event.metaKey && key === 'enter') {
-            await limpiarCache();
-            if(confirm("Limpieza por API completada. ¿Desea recargar?")){
+        if (event.metaKey && key === 'enter') { // Cmd + Enter en Mac
+            event.preventDefault();
+            await limpiarCacheConAPI();
+            if (confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
                 document.location.reload();
             }
         }
         if (event.ctrlKey && key === 'o') {
+            event.preventDefault();
             desplegarArbolCache();
         }
         if (event.ctrlKey && key === 'e') {
+            event.preventDefault();
             recargarPagina();
         }
         if (event.ctrlKey && key === 'b') {
+            event.preventDefault();
             abrirEnNuevaPestana('/os/dbstudio#/databases');
         }
         if (event.ctrlKey && event.altKey && ['√', 'v'].includes(key)) {
+            event.preventDefault();
             navegarAWic('vtable');
         }
         if (event.ctrlKey && event.altKey && ['†', 't'].includes(key)) {
+            event.preventDefault();
             navegarAWic('table');
-        } else if (event.ctrlKey && event.altKey && ['®', 'r'].includes(key)) {
+        }
+        if (event.ctrlKey && event.altKey && ['®', 'r'].includes(key)) {
+            event.preventDefault();
             navegarAWic('report');
-        } else if (event.ctrlKey && key === 'w') {
+        }
+        if (event.ctrlKey && key === 'w') {
+            event.preventDefault();
             await abrirWicDesdeInfo();
         }
     });
+
 })();
