@@ -27,7 +27,7 @@
             threeDotsMenu: ".ax-page-toolbar .mdi-dots-vertical",
             menuItem: '[role="menuitem"]',
             openInNewWic: ".v-navigation-drawer--open.v-navigation-drawer--right .mdi-open-in-new",
-            errorDialogButton: 'button[data-ax-id="message-dialog-action-button"]',
+            errorDialogButton: ['button[data-ax-id="message-dialog-action-button"]', '.v-dialog--active .v-btn.v-btn--has-bg'],
             cursorLoading: ".ax-cursor-toolbar .v-btn--loading",
             progressBar: '[role="progressbar"]'
         },
@@ -94,7 +94,15 @@
      * @returns {Promise<Element>}
      */
     function waitForElement(selector, timeout = CONFIG.timeouts.waitForElement) {
+        console.log("reached")
         return new Promise((resolve, reject) => {
+            if(Array.isArray(selector)) {
+                if(document.querySelector(selector[0])) {
+                    selector = selector[0]
+                } else {
+                    selector = selector[1]
+                }
+            }
             const element = document.querySelector(selector);
             if (element) {
                 return resolve(element);
@@ -248,7 +256,7 @@
 
     // --- MANEJADOR DE EVENTOS ---
     const keyActions = {
-        'ctrl-shift-s': iniciarJob,
+        'ctrl-shift-': iniciarJob,
         'ctrl-enter': limpiarCache,
         'meta-enter': async () => {
             const success = await limpiarCacheConAPI();
@@ -266,15 +274,12 @@
     };
 
     document.addEventListener("keydown", function(event) {
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
-            return;
-        }
+        //const activeEl = document.activeElement;
+        //if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+        //    return;
+        //}
 
         const key = event.key.toLowerCase();
-        if (['control', 'alt', 'shift', 'meta'].includes(key)) {
-            return;
-        }
 
         let keyIdentifier = '';
         if (event.ctrlKey) {
@@ -292,8 +297,8 @@
 
         // Mapeo para teclas especiales del teclado en español que pueden dar problemas
         const keyMap = {'√': 'v', '†': 't', '®': 'r'};
-        keyIdentifier += keyMap[key] || key;
-
+        keyIdentifier += keyMap[key] || ['control', 'alt', 'shift', 'meta'].includes(key) ? '' : key;
+        
         // La lógica ahora es más simple y robusta
         if (keyActions[keyIdentifier]) {
             event.preventDefault();
