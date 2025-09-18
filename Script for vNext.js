@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Mis Atajos para Deister (Versión Mejorada)
+// @name         Mis Atajos para Deister
 // @namespace    http://tampermonkey.net/
-// @version      3.0.0
-// @description  Agrega atajos de teclado para acelerar tareas en Deister, con lógica asíncrona mejorada.
-// @author       Ale.P.
+// @version      4.0.0
+// @description  Atajos de teclado optimizados para Deister, con observadores de DOM y una estructura más robusta.
+// @author       Alessandro P.
 // @match        *://*/os/jobstool*
 // @match        *://*/os/dbstudio*
 // @match        *://*next.mydeister.com/*
@@ -18,8 +18,47 @@
 (function() {
     'use strict';
 
-    //Mostrar mensaje flotante
-    function showNotification(message, duration = 3000) {
+    const CONFIG = {
+        selectors: {
+            runJobButton: ".v-window-item--active .dbstudio-flex-header-body .v-toolbar__items > .v-btn--icon",
+            cacheDeleteIcons: ".cache-delete-icon",
+            closedTreeNodes: ".v-treeview-node__toggle:not(.v-treeview-node__toggle--open)",
+            reloadButton: ".mdi-reload",
+            threeDotsMenu: ".ax-page-toolbar .mdi-dots-vertical",
+            menuItem: '[role="menuitem"]',
+            openInNewWic: ".mdi-open-in-new",
+            errorDialogButton: 'button[data-ax-id="message-dialog-action-button"]',
+            cursorLoading: ".ax-cursor-toolbar .v-btn--loading",
+            progressBar: '[role="progressbar"]'
+        },
+        api: {
+            cacheEndpoints: [
+                '/os/jobstool/meta/dbmetadatacache/all',
+                '/os/jobstool/meta/dictscache/all',
+                '/os/jobstool/TABLE/all',
+                '/os/jobstool/REPORT/all',
+                '/os/jobstool/VTABLE/all',
+                '/os/jobstool/jobs/js/all',
+                '/os/jobstool/jobs/executions/queue/all',
+                '/os/jobstool/jobs/report/all',
+                '/os/jobstool/cachedcursors/all',
+                '/os/jobstool/explorer/tree/all/BEAN/SQLDictCacheBeans/MenuLoaderV2'
+            ]
+        },
+        CACHE_ICONS_CLICK_THRESHOLD: 450,
+        timeouts: {
+            waitForElement: 8000,
+            menuPopup: 2000
+        }
+    };
+
+    // --- FUNCIONES DE UTILIDAD ---
+
+    /**
+     * Muestra una notificación flotante.
+     * MEJORA: Usa el evento 'transitionend' para una eliminación más robusta.
+     */
+    function showNotification(message, duration = 2000) {
         const notification = document.createElement('div');
         notification.textContent = message;
         Object.assign(notification.style, {
@@ -28,8 +67,7 @@
             left: '50%',
             transform: 'translateX(-50%)',
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            color: 'white',
-            padding: '12px 24px',
+            color: 'white', padding: '12px 24px',
             borderRadius: '8px',
             zIndex: '10001',
             opacity: '0',
@@ -44,106 +82,101 @@
         setTimeout(() => {
             notification.style.opacity = '0';
             notification.style.bottom = '20px';
-            setTimeout(() => notification.remove(), 400);
+            notification.addEventListener('transitionend', () => notification.remove(), { once: true });
         }, duration);
     }
 
     /**
-     * Espera a que un elemento aparezca en el DOM.
+     * Espera a que un elemento aparezca en el DOM usando MutationObserver.
+     * MEJORA: Mucho más eficiente que setInterval. Reacciona a los cambios en lugar de preguntar constantemente.
      * @param {string} selector - El selector CSS del elemento.
-     * @param {number} [timeout=8000] - Tiempo máximo de espera en ms.
-     * @returns {Promise<Element>} - Promesa que resuelve con el elemento encontrado.
+     * @param {number} timeout - Tiempo máximo de espera en ms.
+     * @returns {Promise<Element>}
      */
-    function waitForElement(selector, timeout = 8000) {
+    function waitForElement(selector, timeout = CONFIG.timeouts.waitForElement) {
         return new Promise((resolve, reject) => {
-            const intervalTime = 100;
-            let elapsedTime = 0;
-            const interval = setInterval(() => {
-                const element = document.querySelector(selector);
-                if (element) {
-                    clearInterval(interval);
-                    resolve(element);
-                } else {
-                    elapsedTime += intervalTime;
-                    if (elapsedTime >= timeout) {
-                        clearInterval(interval);
-                        reject(new Error(`Elemento no encontrado tras ${timeout/1000}s: ${selector}`));
-                    }
+            const element = document.querySelector(selector);
+            if (element) {
+                return resolve(element);
+            }
+
+            const observer = new MutationObserver(() => {
+                const targetElement = document.querySelector(selector);
+                if (targetElement) {
+                    observer.disconnect();
+                    clearTimeout(timeoutId);
+                    resolve(targetElement);
                 }
-            }, intervalTime);
+            });
+
+            const timeoutId = setTimeout(() => {
+                observer.disconnect();
+                reject(new Error(`Elemento no encontrado tras ${timeout / 1000}s: ${selector}`));
+            }, timeout);
+
+            observer.observe(document.body, { childList: true, subtree: true });
         });
     }
 
-    /** Inicia el job activo. */
+    // --- FUNCIONES DE ACCIÓN ---
+
     function iniciarJob() {
-        const btnRun = document.querySelector(".v-window-item--active .dbstudio-flex-header-body .v-toolbar__items > .v-btn--icon");
+        const btnRun = document.querySelector(CONFIG.selectors.runJobButton);
         if (btnRun && !btnRun.disabled) {
             btnRun.click();
             showNotification("Job iniciado.");
+        } else {
+            showNotification("No se pudo iniciar el job.", 3000);
         }
     }
 
-    /** Limpia la caché, ya sea por Jobstool o por API. */
     async function limpiarCache() {
-        const iconos = document.body.querySelectorAll('.cache-delete-icon');
-        console.log(`Encontrados ${iconos.length} elementos de caché.`);
-        if (iconos.length > 0 && iconos.length < 450) {
-            console.log("Limpiando uno por uno...");
+        showNotification("Limpiando caché...");
+        const iconos = document.body.querySelectorAll(CONFIG.selectors.cacheDeleteIcons);
+        if (iconos.length > 0 && iconos.length < CONFIG.CACHE_ICONS_CLICK_THRESHOLD) {
+            console.log(`Limpiando ${iconos.length} elementos de caché uno por uno...`);
             iconos.forEach(icono => icono.click());
+            showNotification("Caché de elementos limpiada.");
         } else {
             await limpiarCacheConAPI();
         }
     }
 
-    /** Realiza las llamadas a la API para borrar cachés en paralelo. */
     async function limpiarCacheConAPI() {
-        console.log("Limpiando caché por API...");
-        const endpoints = [
-            '/os/jobstool/meta/dbmetadatacache/all',
-            '/os/jobstool/meta/dictscache/all',
-            '/os/jobstool/TABLE/all',
-            '/os/jobstool/REPORT/all',
-            '/os/jobstool/VTABLE/all',
-            '/os/jobstool/jobs/js/all',
-            '/os/jobstool/jobs/executions/queue/all',
-            '/os/jobstool/jobs/report/all',
-            '/os/jobstool/cachedcursors/all'
-        ];
-
-        const promises = endpoints.map(url =>
-            fetch(window.location.origin + url, { method: 'DELETE' })
-            .then(response => console.log(`DELETE ${url} - Status: ${response.status}`))
-            .catch(error => console.error(`Error en DELETE ${url}:`, error))
+        showNotification("Limpiando caché por API...", 5000);
+        const promises = CONFIG.api.cacheEndpoints.map(endpoint =>
+            fetch(window.location.origin + endpoint, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    console.warn(`DELETE ${endpoint} - Status: ${response.status}`);
+                }
+            })
+            .catch(error => console.error(`Error en DELETE ${endpoint}:`, error))
         );
         await Promise.all(promises);
-        console.log("Limpieza por API completada.");
+        showNotification("Limpieza de caché por API completada.");
+        return true; // Devuelve un valor para encadenar acciones
     }
 
-    /** Despliega el árbol de caché de forma iterativa. */
     async function desplegarArbolCache() {
         showNotification("Desplegando árbol de caché...");
         const delay = (ms) => new Promise(res => setTimeout(res, ms));
-        let nodosCerrados = document.querySelectorAll('.v-treeview-node__toggle:not(.v-treeview-node__toggle--open)');
-
-        while (nodosCerrados.length > 0) {
+        let nodosCerrados;
+        while ((nodosCerrados = document.querySelectorAll(CONFIG.selectors.closedTreeNodes)).length > 0) {
             nodosCerrados.forEach(nodo => nodo.click());
-            await delay(200); // Pausa para que el DOM se actualice
-            nodosCerrados = document.querySelectorAll('.v-treeview-node__toggle:not(.v-treeview-node__toggle--open)');
+            await delay(200);
         }
         showNotification("Árbol de caché desplegado.");
     }
 
-    /** Simula un clic en el botón de recargar. */
     function recargarPagina() {
-        document.querySelector('.mdi-reload')?.click();
+        document.querySelector(CONFIG.selectors.reloadButton)?.click();
     }
 
-    /** Abre una nueva pestaña con una URL específica. */
     function abrirEnNuevaPestana(path) {
         window.open(window.location.origin + path, '_blank');
     }
 
-    /** Cambia entre table, vtable o report y abre en nueva pestaña. */
     function navegarAWic(tipo) {
         const urlActual = window.location.href;
         const regex = /table\/wic_obj_(table|vtable|report)/;
@@ -155,89 +188,116 @@
         }
     }
 
-    /** Abrir un WIC desde el menú de info. */
-    async function abrirWicDesdeInfo() {
-        try {
-            const allThreeDots = document.querySelectorAll('.ax-page-toolbar .mdi-dots-vertical');
-            if (!allThreeDots.length) throw new Error("Botón de menú (tres puntos) no encontrado.");
-            allThreeDots[allThreeDots.length - 1].click();
+    const delay = ms => new Promise(res => setTimeout(res, ms));
 
-            await waitForElement('[role="menuitem"]', 2000);
-            const menuItem = Array.from(document.querySelectorAll('[role="menuitem"]'))
-                                  .find(item => item.innerText.toLowerCase().includes('info'));
-            if (!menuItem) throw new Error("Opción 'Info' no encontrada en el menú.");
-            menuItem.click();
-
-            const resultado = await Promise.race([
-                waitForElement('.mdi-open-in-new').then(el => ({ type: 'wic', element: el })),
-                waitForElement('button[data-ax-id="message-dialog-action-button"]').then(el => ({ type: 'error', element: el }))
-            ]);
-
-            if (resultado.type === 'error') {
-                showNotification("Cursor expirado. Cerrando diálogo.");
-                resultado.element.click();
-            } else if (resultado.type === 'wic') {
-                showNotification("Abriendo WIC en nueva pestaña...");
-                resultado.element.click();
+    /**
+     * Abre la ventana de WIC desde el menú de información, con lógica de reintento
+     * en caso de que la sesión/cursor haya expirado.
+     * @param {number} maxRetries - El número máximo de veces que intentará ejecutarse.
+     * @param {number} retryDelay - El tiempo en milisegundos que esperará entre intentos.
+     */
+    async function abrirWicConReintentos(maxRetries = 5, retryDelay = 2000) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            if(document.querySelectorAll(CONFIG.selectors.cursorLoading).length > 0 || document.querySelectorAll(CONFIG.selectors.progressBar).length > 0) {
+                await delay(500)
+                attempt--;
+                continue;
             }
-        } catch (error) {
-            console.error("Flujo 'abrirWicDesdeInfo' falló:", error);
-            showNotification(`Error: ${error.message}`, 5000);
+            try {
+                const allThreeDots = document.querySelectorAll(CONFIG.selectors.threeDotsMenu);
+                if (!allThreeDots.length) throw new Error("Botón de menú (tres puntos) no encontrado.");
+                allThreeDots[allThreeDots.length - 1].click();
+
+                await waitForElement(CONFIG.selectors.menuItem, CONFIG.timeouts.menuPopup);
+                const menuItem = Array.from(document.querySelectorAll(CONFIG.selectors.menuItem)).find(item => item.innerText.toLowerCase().includes('info'));
+                if (!menuItem) {
+                    throw new Error("Opción 'Info' no encontrada en el menú.");
+                }
+                menuItem.click();
+
+                const resultado = await Promise.race([
+                    waitForElement(CONFIG.selectors.openInNewWic).then(el => ({ type: 'wic', element: el })),
+                    waitForElement(CONFIG.selectors.errorDialogButton).then(el => ({ type: 'error', element: el }))
+                ]);
+
+                if (resultado.type === 'wic') {
+                    showNotification("Abriendo WIC en nueva pestaña...");
+                    resultado.element.click();
+                    return;
+                }
+
+                if (resultado.type === 'error') {
+                    showNotification(`Cursor expirado (Intento ${attempt}/${maxRetries}). Reintentando en ${retryDelay / 1000}s...`);
+                    resultado.element.click();
+                    await delay(retryDelay);
+                }
+
+            } catch (error) {
+                console.error(`Intento ${attempt} falló:`, error);
+                showNotification(`Error: ${error.message} (Intento ${attempt}/${maxRetries})`, 5000);
+                if (attempt < maxRetries) {
+                    await delay(retryDelay);
+                }
+            }
         }
+
+        // Si el bucle termina, significa que todos los intentos fallaron.
+        showNotification(`No se pudo abrir WIC después de ${maxRetries} intentos.`, 5000);
+        console.error("El flujo 'abrirWicConReintentos' falló definitivamente.");
     }
 
-    //Eventos
-    document.addEventListener("keydown", async function(event) {
-        //const activeEl = document.activeElement;
-        //if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
-        //    return;
-        //}
-
-        const key = event.key.toLowerCase();
-
-        if (event.ctrlKey && event.shiftKey) {
-            event.preventDefault();
-            iniciarJob();
-        }
-        if (event.ctrlKey && key === 'enter') {
-            event.preventDefault();
-            await limpiarCache();
-            showNotification('La caché se ha borrado con éxito.');
-        }
-        if (event.metaKey && key === 'enter') { // Cmd + Enter en Mac
-            event.preventDefault();
-            await limpiarCacheConAPI();
-            if (confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
+    // --- MANEJADOR DE EVENTOS ---
+    const keyActions = {
+        'ctrl-shift-s': iniciarJob,
+        'ctrl-enter': limpiarCache,
+        'meta-enter': async () => {
+            const success = await limpiarCacheConAPI();
+            if (success && confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
                 document.location.reload();
             }
+        },
+        'ctrl-o': desplegarArbolCache,
+        'ctrl-e': recargarPagina,
+        'ctrl-b': () => abrirEnNuevaPestana('/os/dbstudio#/databases'),
+        'ctrl-alt-v': () => navegarAWic('vtable'),
+        'ctrl-alt-t': () => navegarAWic('table'),
+        'ctrl-alt-r': () => navegarAWic('report'),
+        'ctrl-w': abrirWicConReintentos,
+    };
+
+    document.addEventListener("keydown", function(event) {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+            return;
         }
-        if (event.ctrlKey && key === 'o') {
-            event.preventDefault();
-            desplegarArbolCache();
+
+        const key = event.key.toLowerCase();
+        if (['control', 'alt', 'shift', 'meta'].includes(key)) {
+            return;
         }
-        if (event.ctrlKey && key === 'e') {
-            event.preventDefault();
-            recargarPagina();
+
+        let keyIdentifier = '';
+        if (event.ctrlKey) {
+            keyIdentifier += 'ctrl-';
         }
-        if (event.ctrlKey && key === 'b') {
-            event.preventDefault();
-            abrirEnNuevaPestana('/os/dbstudio#/databases');
+        if (event.metaKey) {
+            keyIdentifier += 'meta-';
         }
-        if (event.ctrlKey && event.altKey && ['√', 'v'].includes(key)) {
-            event.preventDefault();
-            navegarAWic('vtable');
+        if (event.altKey) {
+            keyIdentifier += 'alt-';
         }
-        if (event.ctrlKey && event.altKey && ['†', 't'].includes(key)) {
-            event.preventDefault();
-            navegarAWic('table');
+        if (event.shiftKey) {
+            keyIdentifier += 'shift-';
         }
-        if (event.ctrlKey && event.altKey && ['®', 'r'].includes(key)) {
+
+        // Mapeo para teclas especiales del teclado en español que pueden dar problemas
+        const keyMap = {'√': 'v', '†': 't', '®': 'r'};
+        keyIdentifier += keyMap[key] || key;
+
+        // La lógica ahora es más simple y robusta
+        if (keyActions[keyIdentifier]) {
             event.preventDefault();
-            navegarAWic('report');
-        }
-        if (event.ctrlKey && key === 'w') {
-            event.preventDefault();
-            await abrirWicDesdeInfo();
+            keyActions[keyIdentifier]();
         }
     });
 
