@@ -53,42 +53,67 @@
     };
 
     // --- FUNCIONES DE UTILIDAD ---
+    let notificationContainer = null;
 
     /**
-     * Muestra una notificación flotante.
-     * MEJORA: Usa el evento 'transitionend' para una eliminación más robusta.
+     * Muestra notificaciones flotantes que se apilan verticalmente.
+     * @param {string} message - El mensaje a mostrar.
+     * @param {number} [duration=3000] - Duración en milisegundos.
      */
-    function showNotification(message, duration = 2000) {
+    function showNotification(message, duration = 3000) {
+        if (!notificationContainer) {
+            notificationContainer = document.createElement('div');
+            Object.assign(notificationContainer.style, {
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                zIndex: '10001',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: '10px'
+            });
+            document.body.appendChild(notificationContainer);
+        }
+
         const notification = document.createElement('div');
         notification.textContent = message;
         Object.assign(notification.style, {
-            position: 'fixed',
-            bottom: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            color: 'white', padding: '12px 24px',
+            backgroundColor: 'rgba(28, 28, 30, 0.85)',
+            color: 'white',
+            padding: '12px 24px',
             borderRadius: '8px',
-            zIndex: '10001',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            backdropFilter: 'blur(5px)',
             opacity: '0',
-            transition: 'opacity 0.4s ease, bottom 0.4s ease',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+            transform: 'translateX(30px)',
+            transition: 'opacity 0.3s ease, transform 0.3s ease'
         });
-        document.body.appendChild(notification);
+
+        notificationContainer.appendChild(notification);
         setTimeout(() => {
             notification.style.opacity = '1';
-            notification.style.bottom = '30px';
+            notification.style.transform = 'translateX(0)';
         }, 10);
+
         setTimeout(() => {
             notification.style.opacity = '0';
-            notification.style.bottom = '20px';
-            notification.addEventListener('transitionend', () => notification.remove(), { once: true });
+            notification.style.transform = 'translateX(30px)';
+            notification.addEventListener('transitionend', () => {
+                notification.remove();
+
+                if (notificationContainer && notificationContainer.children.length === 0) {
+                    notificationContainer.remove();
+                    notificationContainer = null;
+                }
+            },{
+                once: true
+            });
         }, duration);
     }
 
     /**
      * Espera a que un elemento aparezca en el DOM usando MutationObserver.
-     * MEJORA: Mucho más eficiente que setInterval. Reacciona a los cambios en lugar de preguntar constantemente.
      * @param {string} selector - El selector CSS del elemento.
      * @param {number} timeout - Tiempo máximo de espera en ms.
      * @returns {Promise<Element>}
@@ -134,7 +159,7 @@
             btnRun.click();
             showNotification("Job iniciado.");
         } else {
-            showNotification("No se pudo iniciar el job.", 3000);
+            showNotification("No se pudo iniciar el job.");
         }
     }
 
@@ -151,7 +176,7 @@
     }
 
     async function limpiarCacheConAPI() {
-        showNotification("Limpiando caché por API...", 5000);
+        showNotification("Limpiando caché por API...");
         const promises = CONFIG.api.cacheEndpoints.map(endpoint =>
             fetch(window.location.origin + endpoint, { method: 'DELETE' })
             .then(response => {
@@ -242,7 +267,7 @@
 
             } catch (error) {
                 console.error(`Intento ${attempt} falló:`, error);
-                showNotification(`Error: ${error.message} (Intento ${attempt}/${maxRetries})`, 5000);
+                showNotification(`Error: ${error.message} (Intento ${attempt}/${maxRetries})`);
                 if (attempt < maxRetries) {
                     await delay(retryDelay);
                 }
@@ -250,7 +275,7 @@
         }
 
         // Si el bucle termina, significa que todos los intentos fallaron.
-        showNotification(`No se pudo abrir WIC después de ${maxRetries} intentos.`, 5000);
+        showNotification(`No se pudo abrir WIC después de ${maxRetries} intentos.`);
         console.error("El flujo 'abrirWicConReintentos' falló definitivamente.");
     }
 
