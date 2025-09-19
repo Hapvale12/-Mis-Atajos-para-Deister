@@ -268,8 +268,11 @@
         'ctrl-e': recargarPagina,
         'ctrl-b': () => abrirEnNuevaPestana('/os/dbstudio#/databases'),
         'ctrl-alt-v': () => navegarAWic('vtable'),
+        'ctrl-alt-√': () => navegarAWic('vtable'),
         'ctrl-alt-t': () => navegarAWic('table'),
+        'ctrl-alt-†': () => navegarAWic('table'),
         'ctrl-alt-r': () => navegarAWic('report'),
+        'ctrl-alt-®': () => navegarAWic('report'),
         'ctrl-w': abrirWicConReintentos,
     };
 
@@ -279,7 +282,7 @@
         //    return;
         //}
 
-        const key = event.key.toLowerCase();
+        const key = event.key.toString().toLowerCase();
 
         let keyIdentifier = '';
         if (event.ctrlKey) {
@@ -295,10 +298,8 @@
             keyIdentifier += 'shift-';
         }
 
-        // Mapeo para teclas especiales del teclado en español que pueden dar problemas
-        const keyMap = {'√': 'v', '†': 't', '®': 'r'};
-        keyIdentifier += keyMap[key] || ['control', 'alt', 'shift', 'meta'].includes(key) ? '' : key;
-        
+        keyIdentifier += ['control', 'alt', 'shift', 'meta'].includes(key) ? '' : key;
+
         // La lógica ahora es más simple y robusta
         if (keyActions[keyIdentifier]) {
             event.preventDefault();
