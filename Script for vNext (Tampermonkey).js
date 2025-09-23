@@ -1,11 +1,20 @@
 // ==UserScript==
 // @name         Mis Atajos para Deister
+// @namespace    http://tampermonkey.net/
 // @version      4.0.0
 // @description  Atajos de teclado optimizados para Deister, con observadores de DOM y una estructura más robusta.
 // @author       Alessandro P.
+// @match        *://*/os/jobstool*
+// @match        *://*/os/dbstudio*
+// @match        *://*next.mydeister.com/*
+// @match        *://*next2.mydeister.com/*
+// @match        *://*heracles-next.mydeister.com/*
+// @match        *192.168.100.52:8085/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=deistercloud.com
 // @grant        none
 // @update       2025-09-18
 // ==/UserScript==
+
 (function() {
     'use strict';
 
