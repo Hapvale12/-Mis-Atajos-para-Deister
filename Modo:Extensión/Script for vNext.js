@@ -298,7 +298,7 @@
         //    return;
         //}
 
-        const key = event.key.toString().toLowerCase();
+        const key = event.key?.toString().toLowerCase();
 
         let keyIdentifier = '';
         if (event.ctrlKey) {
