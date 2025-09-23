@@ -110,7 +110,6 @@
      * @returns {Promise<Element>}
      */
     function waitForElement(selector, timeout = CONFIG.timeouts.waitForElement) {
-        console.log("reached")
         return new Promise((resolve, reject) => {
             if(Array.isArray(selector)) {
                 if(document.querySelector(selector[0])) {
@@ -271,15 +270,11 @@
     }
 
     // --- MANEJADOR DE EVENTOS ---
+    // Define el objeto con la lógica para ambos SOs
     const keyActions = {
+        // Atajos universales
         'ctrl-shift-': iniciarJob,
         'ctrl-enter': limpiarCache,
-        'meta-enter': async () => {
-            const success = await limpiarCacheConAPI();
-            if (success && confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
-                document.location.reload();
-            }
-        },
         'ctrl-o': desplegarArbolCache,
         'ctrl-e': recargarPagina,
         'ctrl-b': () => abrirEnNuevaPestana('/os/dbstudio#/databases'),
@@ -289,12 +284,30 @@
         'ctrl-alt-†': () => navegarAWic('table'),
         'ctrl-alt-r': () => navegarAWic('report'),
         'ctrl-alt-®': () => navegarAWic('report'),
-        'ctrl-w': abrirWicConReintentos,
+        'ctrl-alt-w': abrirWicConReintentos,
+        'ctrl-alt-æ': abrirWicConReintentos,
+    };
+
+    // Se agregó una lógica especial para manejar la tecla 'meta' (Cmd en Mac, Windows en Win)
+    const metaEnterAction = async () => {
+        const success = await limpiarCacheConAPI();
+        if (success && confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
+            document.location.reload();
+        }
     };
 
     document.addEventListener("keydown", function(event) {
-        //const activeEl = document.activeElement;
-        //if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+        // Lógica para atajos de meta + enter
+        // Verifica si la tecla 'Meta' (Cmd en Mac, Win en Windows) está presionada.
+        if (event.key === 'Enter' && event.metaKey) {
+            event.preventDefault();
+            metaEnterAction();
+            return;
+        }
+
+        // Si la tecla de control o alt está presionada, verifica si se trata de la combinación para evitar que se ejecute la acción
+        // si el usuario está tipeando un caracter.
+        //if ((event.ctrlKey || event.altKey) && (['input', 'textarea'].includes(event.target.tagName.toLowerCase()) || event.target.isContentEditable)) {
         //    return;
         //}
 
