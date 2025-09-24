@@ -177,6 +177,7 @@
             showNotification(`Espera ${timeRemaining} segundos antes de volver a limpiar la caché.`);
             return false;
         }
+        localStorage.setItem('lastCacheClearTime', horaActual);
 
         showNotification("Limpiando caché...");
         const promises = CONFIG.api.cacheEndpoints.map(endpoint =>
