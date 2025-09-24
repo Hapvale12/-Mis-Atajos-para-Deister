@@ -119,7 +119,6 @@
      * @returns {Promise<Element>}
      */
     function waitForElement(selector, timeout = CONFIG.timeouts.waitForElement) {
-        console.log("reached")
         return new Promise((resolve, reject) => {
             if(Array.isArray(selector)) {
                 if(document.querySelector(selector[0])) {
@@ -178,14 +177,14 @@
     async function limpiarCacheConAPI() {
         showNotification("Limpiando caché por API...");
         const promises = CONFIG.api.cacheEndpoints.map(endpoint =>
-            fetch(window.location.origin + endpoint, { method: 'DELETE' })
-            .then(response => {
-                if (!response.ok) {
-                    console.warn(`DELETE ${endpoint} - Status: ${response.status}`);
-                }
-            })
-            .catch(error => console.error(`Error en DELETE ${endpoint}:`, error))
-        );
+                                                       fetch(window.location.origin + endpoint, { method: 'DELETE' })
+                                                       .then(response => {
+            if (!response.ok) {
+                console.warn(`DELETE ${endpoint} - Status: ${response.status}`);
+            }
+        })
+                                                       .catch(error => console.error(`Error en DELETE ${endpoint}:`, error))
+                                                      );
         await Promise.all(promises);
         showNotification("Limpieza de caché por API completada.");
         return true; // Devuelve un valor para encadenar acciones
@@ -279,16 +278,62 @@
         console.error("El flujo 'abrirWicConReintentos' falló definitivamente.");
     }
 
+    function duplicarVentana() {
+        window.open(window.location.href, '_blank')
+    }
+
+    //En test
+    //function duplicarDBStudio() {
+    //    showNotification("Iniciando duplicación de pestaña...");
+    //
+    //    // Selecciona el elemento del menú contextual ACTIVO
+    //    // Si este selector encuentra un elemento, significa que hay un menú abierto
+    //    const activeMenuitem = document.querySelector('.menuable__content__active [role="menuitem"]');
+    //
+    //    if (activeMenuitem) {
+    //        // Si hay un menú contextual activo, el primer elemento es el de duplicar.
+    //        activeMenuitem.click();
+    //        showNotification("Duplicando la pestaña actual...");
+    //    } else {
+    //        // Si no hay un menú activo, asume que se quiere duplicar la última pestaña de la barra de pestañas.
+    //        const allTabs = document.querySelectorAll('.v-tab.v-tab--active');
+    //        if (allTabs.length > 0) {
+    //            const lastActiveTab = allTabs[allTabs.length - 1];
+    //
+    //            // Crea y dispara un evento de clic derecho en la última pestaña activa
+    //            const rightClickEvent = new MouseEvent('contextmenu', {
+    //                bubbles: true,
+    //                cancelable: true,
+    //                view: window,
+    //                button: 2,
+    //                buttons: 2
+    //            });
+    //            lastActiveTab.dispatchEvent(rightClickEvent);
+    //
+    //            showNotification("Disparando menú contextual en la última pestaña.");
+    //
+    //            // Espera un momento para que el menú aparezca y luego haz clic en "Duplicate"
+    //            setTimeout(() => {
+    //                const duplicateButton = document.querySelector('.v-menu__content.theme--dark.menuable__content__active [role="menuitem"]');
+    //                if (duplicateButton) {
+    //                    duplicateButton.click();
+    //                    showNotification("Pestaña duplicada exitosamente.");
+    //                } else {
+    //                    showNotification("No se encontró el botón de duplicar.");
+    //                }
+    //            }, 200); // Pequeña espera para que el DOM se actualice
+    //        } else {
+    //            showNotification("No se encontraron pestañas activas para duplicar.");
+    //        }
+    //    }
+    //}
+
     // --- MANEJADOR DE EVENTOS ---
+    // Define el objeto con la lógica para ambos SOs
     const keyActions = {
+        // Atajos universales
         'ctrl-shift-': iniciarJob,
         'ctrl-enter': limpiarCache,
-        'meta-enter': async () => {
-            const success = await limpiarCacheConAPI();
-            if (success && confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
-                document.location.reload();
-            }
-        },
         'ctrl-o': desplegarArbolCache,
         'ctrl-e': recargarPagina,
         'ctrl-b': () => abrirEnNuevaPestana('/os/dbstudio#/databases'),
@@ -298,16 +343,38 @@
         'ctrl-alt-†': () => navegarAWic('table'),
         'ctrl-alt-r': () => navegarAWic('report'),
         'ctrl-alt-®': () => navegarAWic('report'),
-        'ctrl-w': abrirWicConReintentos,
+        'ctrl-alt-w': abrirWicConReintentos,
+        'ctrl-alt-æ': abrirWicConReintentos,
+        'ctrl-alt-d': duplicarVentana,
+        'ctrl-alt-∂': duplicarVentana,
+        // Aún no funciona => 'ctrl-alt-k': duplicarDBStudio,
+        // Aún no funciona => 'ctrl-alt-§': duplicarDBStudio
+    };
+
+    // Se agregó una lógica especial para manejar la tecla 'meta' (Cmd en Mac, Windows en Win)
+    const metaEnterAction = async () => {
+        const success = await limpiarCacheConAPI();
+        if (success && confirm("Limpieza por API completada. ¿Desea recargar la página?")) {
+            document.location.reload();
+        }
     };
 
     document.addEventListener("keydown", function(event) {
-        //const activeEl = document.activeElement;
-        //if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+        // Lógica para atajos de meta + enter
+        // Verifica si la tecla 'Meta' (Cmd en Mac, Win en Windows) está presionada.
+        if (event.key === 'Enter' && event.metaKey) {
+            event.preventDefault();
+            metaEnterAction();
+            return;
+        }
+
+        // Si la tecla de control o alt está presionada, verifica si se trata de la combinación para evitar que se ejecute la acción
+        // si el usuario está tipeando un caracter.
+        //if ((event.ctrlKey || event.altKey) && (['input', 'textarea'].includes(event.target.tagName.toLowerCase()) || event.target.isContentEditable)) {
         //    return;
         //}
 
-        const key = event.key.toString().toLowerCase();
+        const key = event.key?.toString().toLowerCase();
 
         let keyIdentifier = '';
         if (event.ctrlKey) {
