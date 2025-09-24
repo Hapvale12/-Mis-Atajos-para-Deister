@@ -6,7 +6,6 @@
 // @grant        none
 // @update       2025-09-18
 // ==/UserScript==
-
 (function() {
     'use strict';
 
@@ -143,31 +142,43 @@
     }
 
     // --- FUNCIONES DE ACCIÓN ---
-
     function iniciarJob() {
         const btnRun = document.querySelector(CONFIG.selectors.runJobButton);
+        console.log("Entró")
         if (btnRun && !btnRun.disabled) {
             btnRun.click();
-            showNotification("Job iniciado.");
-        } else {
-            showNotification("No se pudo iniciar el job.");
+            showNotification("Job iniciado");
+        } else if(!btnRun) {
+            return;
+        } else if(btnRun.disabled){
+            showNotification("Ya hay una ejecución en curso");
         }
     }
 
     async function limpiarCache() {
-        showNotification("Limpiando caché...");
         const iconos = document.body.querySelectorAll(CONFIG.selectors.cacheDeleteIcons);
         if (iconos.length > 0 && iconos.length < CONFIG.CACHE_ICONS_CLICK_THRESHOLD) {
             console.log(`Limpiando ${iconos.length} elementos de caché uno por uno...`);
             iconos.forEach(icono => icono.click());
-            showNotification("Caché de elementos limpiada.");
+            showNotification("Caché de elementos limpiada");
         } else {
             await limpiarCacheConAPI();
         }
     }
+    const tiempoEspera = 5000;
 
     async function limpiarCacheConAPI() {
-        showNotification("Limpiando caché por API...");
+
+        const ultimaEjecucion = localStorage.getItem('lastCacheClearTime');
+        const horaActual = new Date().getTime();
+
+        if (ultimaEjecucion && (horaActual - ultimaEjecucion < tiempoEspera)) {
+            const timeRemaining = Math.ceil((tiempoEspera - (horaActual - ultimaEjecucion)) / 1000);
+            showNotification(`Espera ${timeRemaining} segundos antes de volver a limpiar la caché.`);
+            return false;
+        }
+
+        showNotification("Limpiando caché...");
         const promises = CONFIG.api.cacheEndpoints.map(endpoint =>
                                                        fetch(window.location.origin + endpoint, { method: 'DELETE' })
                                                        .then(response => {
@@ -178,8 +189,11 @@
                                                        .catch(error => console.error(`Error en DELETE ${endpoint}:`, error))
                                                       );
         await Promise.all(promises);
+
+        localStorage.setItem('lastCacheClearTime', horaActual);
+
         showNotification("Limpieza de caché por API completada.");
-        return true; // Devuelve un valor para encadenar acciones
+        return true;
     }
 
     async function desplegarArbolCache() {
@@ -220,7 +234,7 @@
      * @param {number} maxRetries - El número máximo de veces que intentará ejecutarse.
      * @param {number} retryDelay - El tiempo en milisegundos que esperará entre intentos.
      */
-    async function abrirWicConReintentos(maxRetries = 5, retryDelay = 2000) {
+    async function abrirWicConReintentos(maxRetries = 3, retryDelay = 2000) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             if(document.querySelectorAll(CONFIG.selectors.cursorLoading).length > 0 || document.querySelectorAll(CONFIG.selectors.progressBar).length > 0) {
                 await delay(500)
@@ -388,6 +402,14 @@
         if (keyActions[keyIdentifier]) {
             event.preventDefault();
             keyActions[keyIdentifier]();
+        }
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+        // Comprueba si la URL actual contiene '/os/dbstudio'
+        // Solicita confirmación para recargar.
+        if (window.location.href.includes('/os/dbstudio')) {
+            e.preventDefault();
         }
     });
 
