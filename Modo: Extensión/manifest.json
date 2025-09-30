@@ -5,7 +5,8 @@
   "description": "Atajos de teclado optimizados para Deister, con observadores de DOM y una estructura más robusta.",
   "permissions": [
     "declarativeContent",
-    "activeTab"
+    "activeTab",
+    "storage"
   ],
   "background": {
     "service_worker": "background.js"
@@ -26,6 +27,7 @@
     }
   ],
   "action": {
-    "default_title": "Mis Atajos para Deister"
+    "default_title": "Mis Atajos para Deister",
+    "default_popup": "popup.html"
   }
 }

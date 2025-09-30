@@ -22,20 +22,20 @@
             cursorLoading: ".ax-cursor-toolbar .v-btn--loading",
             progressBar: '[role="progressbar"]'
         },
-        api: {
-            cacheEndpoints: [
-                '/os/jobstool/meta/dbmetadatacache/all',
-                '/os/jobstool/meta/dictscache/all',
-                '/os/jobstool/TABLE/all',
-                '/os/jobstool/REPORT/all',
-                '/os/jobstool/VTABLE/all',
-                '/os/jobstool/jobs/js/all',
-                '/os/jobstool/jobs/executions/queue/all',
-                '/os/jobstool/jobs/report/all',
-                '/os/jobstool/cachedcursors/all',
-                '/os/jobstool/explorer/tree/all/BEAN/SQLDictCacheBeans/MenuLoaderV2'
-            ]
-        },
+        // api: {
+        //     cacheEndpoints: [
+        //         '/os/jobstool/meta/dbmetadatacache/all',
+        //         '/os/jobstool/meta/dictscache/all',
+        //         '/os/jobstool/TABLE/all',
+        //         '/os/jobstool/REPORT/all',
+        //         '/os/jobstool/VTABLE/all',
+        //         '/os/jobstool/jobs/js/all',
+        //         '/os/jobstool/jobs/executions/queue/all',
+        //         '/os/jobstool/jobs/report/all',
+        //         '/os/jobstool/cachedcursors/all',
+        //         '/os/jobstool/explorer/tree/all/BEAN/SQLDictCacheBeans/MenuLoaderV2'
+        //     ]
+        // },
         CACHE_ICONS_CLICK_THRESHOLD: 450,
         timeouts: {
             waitForElement: 8000,
@@ -180,20 +180,30 @@
         localStorage.setItem('lastCacheClearTime', horaActual);
 
         showNotification("Limpiando caché...");
-        const promises = CONFIG.api.cacheEndpoints.map(endpoint =>
-                                                       fetch(window.location.origin + endpoint, { method: 'DELETE' })
-                                                       .then(response => {
-            if (!response.ok) {
-                console.warn(`DELETE ${endpoint} - Status: ${response.status}`);
+        
+        // Carga las APIs seleccionadas del almacenamiento
+        chrome.storage.sync.get(['selectedApis'], async (result) => {
+            const selectedApis = result.selectedApis //|| CONFIG.api.cacheEndpoints;
+            if(selectedApis.length === 0) {
+                showNotification("No hay APIs seleccionadas para limpiar la caché.");
+                return false;
             }
-        })
-                                                       .catch(error => console.error(`Error en DELETE ${endpoint}:`, error))
-                                                      );
-        await Promise.all(promises);
+            const promises = selectedApis.map(endpoint =>
+                fetch(window.location.origin + endpoint, { method: 'DELETE' })
+                .then(response => {
+                    if (!response.ok) {
+                        console.warn(`DELETE ${endpoint} - Status: ${response.status}`);
+                    }
+                })
+                .catch(error => console.error(`Error en DELETE ${endpoint}:`, error))
+            );
+            
+            await Promise.all(promises);
 
-        localStorage.setItem('lastCacheClearTime', horaActual);
+            localStorage.setItem('lastCacheClearTime', horaActual);
 
-        showNotification("Limpieza de caché por API completada.");
+            showNotification("Limpieza de caché por API completada.");
+        });
         return true;
     }
 

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Opciones de APIs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            min-width: 250px;
+            padding: 15px;
+        }
+
+        .api-list {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .api-item {
+            margin-bottom: 8px;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>APIs para limpiar</h2>
+    <ul id="api-checkboxes" class="api-list">
+    </ul>
+
+    <button id="save-button">Guardar</button>
+    <div id="status-message" style="margin-top: 10px; color: green;"></div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
